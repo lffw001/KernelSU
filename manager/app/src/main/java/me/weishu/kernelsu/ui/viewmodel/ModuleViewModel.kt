@@ -1,6 +1,5 @@
 package me.weishu.kernelsu.ui.viewmodel
 
-import android.net.Uri
 import android.os.SystemClock
 import android.util.Log
 import androidx.compose.runtime.derivedStateOf
@@ -11,12 +10,14 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
+import me.weishu.kernelsu.ksuApp
+import me.weishu.kernelsu.ui.util.HanziToPinyin
 import me.weishu.kernelsu.ui.util.listModules
 import me.weishu.kernelsu.ui.util.overlayFsAvailable
 import org.json.JSONArray
 import org.json.JSONObject
 import java.text.Collator
-import java.util.*
+import java.util.Locale
 
 class ModuleViewModel : ViewModel() {
 
@@ -36,6 +37,8 @@ class ModuleViewModel : ViewModel() {
         val update: Boolean,
         val remove: Boolean,
         val updateJson: String,
+        val hasWebUi: Boolean,
+        val hasActionScript: Boolean,
     )
 
     data class ModuleUpdateInfo(
@@ -47,13 +50,23 @@ class ModuleViewModel : ViewModel() {
 
     var isRefreshing by mutableStateOf(false)
         private set
+    var search by mutableStateOf("")
 
     var isOverlayAvailable by mutableStateOf(overlayFsAvailable())
         private set
 
+    var sortEnabledFirst by mutableStateOf(false)
+    var sortActionFirst by mutableStateOf(false)
     val moduleList by derivedStateOf {
-        val comparator = compareBy(Collator.getInstance(Locale.getDefault()), ModuleInfo::id)
-        modules.sortedWith(comparator).also {
+        val comparator =
+            compareBy<ModuleInfo>(
+                { if (sortEnabledFirst) !it.enabled else 0 },
+                { if (sortActionFirst) !it.hasWebUi && !it.hasActionScript else 0 },
+            ).thenBy(Collator.getInstance(Locale.getDefault()), ModuleInfo::id)
+        modules.filter {
+            it.id.contains(search, true) || it.name.contains(search, true) || HanziToPinyin.getInstance()
+                .toPinyinString(it.name).contains(search, true)
+        }.sortedWith(comparator).also {
             isRefreshing = false
         }
     }
@@ -87,7 +100,6 @@ class ModuleViewModel : ViewModel() {
                     .map { obj ->
                         ModuleInfo(
                             obj.getString("id"),
-
                             obj.optString("name"),
                             obj.optString("author", "Unknown"),
                             obj.optString("version", "Unknown"),
@@ -96,7 +108,9 @@ class ModuleViewModel : ViewModel() {
                             obj.getBoolean("enabled"),
                             obj.getBoolean("update"),
                             obj.getBoolean("remove"),
-                            obj.optString("updateJson")
+                            obj.optString("updateJson"),
+                            obj.optBoolean("web"),
+                            obj.optBoolean("action")
                         )
                     }.toList()
                 isNeedRefresh = false
@@ -115,56 +129,43 @@ class ModuleViewModel : ViewModel() {
         }
     }
 
-    fun checkUpdate(m: ModuleInfo, callback: (String?) -> Unit) {
+    fun checkUpdate(m: ModuleInfo): Triple<String, String, String> {
+        val empty = Triple("", "", "")
         if (m.updateJson.isEmpty() || m.remove || m.update || !m.enabled) {
-            callback(null)
-            return
+            return empty
         }
-        viewModelScope.launch(Dispatchers.IO) {
-            // download updateJson
-            val result = kotlin.runCatching {
-                val url = m.updateJson
-                Log.i(TAG, "checkUpdate url: $url")
-                val response = okhttp3.OkHttpClient()
-                    .newCall(
-                    okhttp3.Request.Builder()
-                        .url(url)
-                        .build()
+        // download updateJson
+        val result = kotlin.runCatching {
+            val url = m.updateJson
+            Log.i(TAG, "checkUpdate url: $url")
+            val response = ksuApp.okhttpClient.newCall(
+                    okhttp3.Request.Builder().url(url).build()
                 ).execute()
-                Log.d(TAG, "checkUpdate code: ${response.code}")
-                if (response.isSuccessful) {
-                    response.body?.string() ?: ""
-                } else {
-                    ""
-                }
-            }.getOrDefault("")
-            Log.i(TAG, "checkUpdate result: $result")
-
-            if (result.isEmpty()) {
-                callback(null)
-                return@launch
+            Log.d(TAG, "checkUpdate code: ${response.code}")
+            if (response.isSuccessful) {
+                response.body?.string() ?: ""
+            } else {
+                ""
             }
+        }.getOrDefault("")
+        Log.i(TAG, "checkUpdate result: $result")
 
-            val updateJson = kotlin.runCatching {
-                JSONObject(result)
-            }.getOrNull()
-
-            if (updateJson == null) {
-                callback(null)
-                return@launch
-            }
-
-            val version = updateJson.optString("version", "")
-            val versionCode = updateJson.optInt("versionCode", 0)
-            val zipUrl = updateJson.optString("zipUrl", "")
-            val changelog = updateJson.optString("changelog", "")
-            if (versionCode <= m.versionCode || zipUrl.isEmpty()) {
-                callback(null)
-                return@launch
-            }
-
-            callback(zipUrl)
+        if (result.isEmpty()) {
+            return empty
         }
-    }
 
+        val updateJson = kotlin.runCatching {
+            JSONObject(result)
+        }.getOrNull() ?: return empty
+
+        val version = updateJson.optString("version", "")
+        val versionCode = updateJson.optInt("versionCode", 0)
+        val zipUrl = updateJson.optString("zipUrl", "")
+        val changelog = updateJson.optString("changelog", "")
+        if (versionCode <= m.versionCode || zipUrl.isEmpty()) {
+            return empty
+        }
+
+        return Triple(zipUrl, version, changelog)
+    }
 }

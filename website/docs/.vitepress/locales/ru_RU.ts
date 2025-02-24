@@ -23,7 +23,7 @@ export default defineConfig({
 
     footer: {
         message: 'Выпускается под лицензией GPL3.',
-        copyright: 'Авторские права © 2022-текущее Разработчики KernelSU'
+        copyright: 'Авторские права © 2022-текущее Разработчики KernelSU.'
     },
 
     editLink: {
@@ -36,7 +36,6 @@ export default defineConfig({
 function nav() {
   return [
     { text: 'Руководство', link: '/ru_RU/guide/what-is-kernelsu' },
-    { text: 'Github', link: 'https://github.com/tiann/KernelSU' }
   ]
 }
 
