@@ -4,14 +4,18 @@ KernelSU 提供了一个模块机制，它可以在保持系统分区完整性�
 
 KernelSU 的模块运作机制与 Magisk 几乎是一样的，如果你熟悉 Magisk 模块的开发，那么开发 KernelSU 的模块大同小异，你可以跳过下面有关模块的介绍，只需要了解 [KernelSU 模块与 Magisk 模块的异同](difference-with-magisk.md)。
 
+## 模块界面
+
+KernelSU 的模块支持显示界面并与用户交互，请参阅 [WebUI 文档](module-webui.md)。
+
 ## Busybox
 
-KernelSU 提供了一个功能完备的 BusyBox 二进制文件（包括完整的SELinux支持）。可执行文件位于 `/data/adb/ksu/bin/busybox`。
+KernelSU 提供了一个功能完备的 BusyBox 二进制文件（包括完整的 SELinux 支持）。可执行文件位于 `/data/adb/ksu/bin/busybox`。
 KernelSU 的 BusyBox 支持运行时可切换的 "ASH Standalone Shell Mode"。
 这种独立模式意味着在运行 BusyBox 的 ash shell 时，每个命令都会直接使用 BusyBox 中内置的应用程序，而不管 PATH 设置为什么。
-例如，`ls`、`rm`、`chmod` 等命令将不会使用 PATH 中设置的命令（在Android的情况下，默认情况下分别为 `/system/bin/ls`、`/system/bin/rm` 和 `/system/bin/chmod`），而是直接调用 BusyBox 内置的应用程序。
-这确保了脚本始终在可预测的环境中运行，并始终具有完整的命令套件，无论它运行在哪个Android版本上。
-要强制一个命令不使用BusyBox，你必须使用完整路径调用可执行文件。
+例如，`ls`、`rm`、`chmod` 等命令将不会使用 PATH 中设置的命令（在 Android 的情况下，默认情况下分别为 `/system/bin/ls`、`/system/bin/rm` 和 `/system/bin/chmod`），而是直接调用 BusyBox 内置的应用程序。
+这确保了脚本始终在可预测的环境中运行，并始终具有完整的命令套件，无论它运行在哪个 Android 版本上。
+要强制一个命令不使用 BusyBox，你必须使用完整路径调用可执行文件。
 
 在 KernelSU 上下文中运行的每个 shell 脚本都将在 BusyBox 的 ash shell 中以独立模式运行。对于第三方开发者相关的内容，包括所有启动脚本和模块安装脚本。
 
@@ -59,6 +63,7 @@ KernelSU 模块就是一个放置在 `/data/adb/modules` 内且满足如下结�
 │   │      *** 可选文件 ***
 │   │
 │   ├── post-fs-data.sh     <--- 这个脚本将会在 post-fs-data 模式下运行
+│   ├── post-mount.sh       <--- 这个脚本将会在 post-mount 模式下运行
 │   ├── service.sh          <--- 这个脚本将会在 late_start 服务模式下运行
 │   ├── boot-completed.sh   <--- 这个脚本将会在 Android 系统启动完毕后以服务模式运行
 |   ├── uninstall.sh        <--- 这个脚本将会在模块被卸载时运行
@@ -67,9 +72,9 @@ KernelSU 模块就是一个放置在 `/data/adb/modules` 内且满足如下结�
 │   │
 │   │      *** 自动生成的目录，不要手动创建或者修改！ ***
 │   │
-│   ├── vendor              <--- A symlink to $MODID/system/vendor
-│   ├── product             <--- A symlink to $MODID/system/product
-│   ├── system_ext          <--- A symlink to $MODID/system/system_ext
+│   ├── vendor              <--- 如果 /system/vendor 是符号链接且存在，从 $MODID/system/vendor 移动到模块根目录
+│   ├── product             <--- 如果 /system/product 是符号链接且存在，从 $MODID/system/product 移动到模块根目录
+│   ├── system_ext          <--- 如果 /system/system_ext 是符号链接且存在，从 $MODID/system/system_ext 移动到模块根目录
 │   │
 │   │      *** Any additional files / folders are allowed ***
 │   │
@@ -84,7 +89,7 @@ KernelSU 模块就是一个放置在 `/data/adb/modules` 内且满足如下结�
 ```
 
 ::: tip 与 Magisk 的差异
-KernelSU 没有内置的针对 Zygisk 的支持，因此模块中没有 Zygisk 相关的内容，但你可以通过 [ZygiskOnKernelSU](https://github.com/Dr-TSNG/ZygiskOnKernelSU) 来支持 Zygisk 模块，此时 Zygisk 模块的内容与 Magisk 所支持的 Zygisk 是完全相同的。
+KernelSU 没有内置的针对 Zygisk 的支持，因此模块中没有 Zygisk 相关的内容，但你可以通过 [ZygiskNext](https://github.com/Dr-TSNG/ZygiskNext) 来支持 Zygisk 模块，此时 Zygisk 模块的内容与 Magisk 所支持的 Zygisk 是完全相同的。
 :::
 
 ### module.prop
@@ -103,13 +108,13 @@ description=<string>
 - id 必须与这个正则表达式匹配：`^[a-zA-Z][a-zA-Z0-9._-]+$` 例如：✓ `a_module`，✓ `a.module`，✓ `module-101`，✗ `a  module`，✗ `1_module`，✗ `-a-module`。这是您的模块的唯一标识符，发布后不应更改。
 - versionCode 必须是一个整数，用于比较版本。
 - 其他未在上面提到的内容可以是任何单行字符串。
-- 请确保使用 UNIX（LF）换行类型，而不是Windows（CR + LF）或 Macintosh（CR）。
+- 请确保使用 UNIX（LF）换行类型，而不是 Windows（CR + LF）或 Macintosh（CR）。
 
 ### Shell 脚本 {#shell-scripts}
 
-请阅读 [启动脚本](#boot-scripts) 一节，以了解 `post-fs-data.sh`, `service.sh` 和 `boot-completed.sh` 之间的区别。对于大多数模块开发者来说，如果您只需要运行一个启动脚本，`service.sh` 应该已经足够了。
+请阅读 [启动脚本](#boot-scripts) 一节，以了解 `post-fs-data.sh`, `post-mount.sh`, `service.sh` 和 `boot-completed.sh` 之间的区别。对于大多数模块开发者来说，如果您只需要运行一个启动脚本，`service.sh` 应该已经足够了。
 
-在您的模块的所有脚本中，请使用 `MODDIR=${0%/*}`来获取您的模块的基本目录路径；请勿在脚本中硬编码您的模块路径。
+在您的模块的所有脚本中，请使用`MODDIR=${0%/*}`来获取您的模块的基本目录路径；请勿在脚本中硬编码您的模块路径。
 
 :::tip 与 Magisk 的差异
 你可以通过环境变量 `KSU` 来判断脚本是运行在 KernelSU 还是 Magisk 中，如果运行在 KernelSU，这个值会被设置为 `true`。
@@ -251,7 +256,7 @@ set_perm_recursive <directory> <owner> <group> <dirpermission> <filepermission> 
 在 KernelSU 中，启动脚本根据存放位置的不同还分为两种：通用脚本和模块脚本。
 
 - 通用脚本
-  - 放置在 `/data/adb/post-fs-data.d`, `/data/adb/service.d` 或 `/data/adb/boot-completed.d` 中。
+  - 放置在 `/data/adb/post-fs-data.d`, `/data/adb/post-mount.d`, `/data/adb/service.d` 或 `/data/adb/boot-completed.d` 中。
   - 只有在脚本被设置为可执行（`chmod +x script.sh`）时才会被执行。
   - 在 `post-fs-data.d` 中的脚本以 post-fs-data 模式运行，在 `service.d` 中的脚本以 late_start 服务模式运行。
   - 模块**不应**在安装过程中添加通用脚本。
@@ -259,6 +264,70 @@ set_perm_recursive <directory> <owner> <group> <dirpermission> <filepermission> 
 - 模块脚本
   - 放置在模块自己的文件夹中。
   - 只有当模块被启用时才会执行。
-  - `post-fs-data.sh` 以 post-fs-data 模式运行，而 `service.sh` 则以 late_start 服务模式运行，`boot-completed` 在 Android 系统启动完毕后以服务模式运行。
+  - `post-fs-data.sh` 以 post-fs-data 模式运行，`post-mount.sh` 以 post-mount 模式运行，而 `service.sh` 则以 late_start 服务模式运行，`boot-completed` 在 Android 系统启动完毕后以服务模式运行。
 
 所有启动脚本都将在 KernelSU 的 BusyBox ash shell 中运行，并启用“独立模式”。
+
+### 启动脚本的流程解疑 {#Boot-scripts-process-explanation}
+
+以下是 Android 的相关启动流程（部分省略），其中包括了 KernelSU 的操作（带前导星号），应该能帮助你更好地理解这些启动脚本的用途：
+
+```txt
+0. Bootloader (nothing on screen)
+load patched boot.img
+load kernel:
+    - GKI mode: GKI kernel with KernelSU integrated
+    - LKM mode: stock kernel
+...
+
+1. kernel exec init (oem logo on screen):
+    - GKI mode: stock init
+    - LKM mode: exec ksuinit, insmod kernelsu.ko, exec stock init
+mount /dev, /dev/pts, /proc, /sys, etc.
+property-init -> read default props
+read init.rc
+...
+early-init -> init -> late_init
+early-fs
+   start vold
+fs
+  mount /vendor, /system, /persist, etc.
+post-fs-data
+  *safe mode check
+  *execute general scripts in post-fs-data.d/
+  *load sepolicy.rule
+  *mount tmpfs
+  *execute module scripts post-fs-data.sh
+    **(Zygisk)./bin/zygisk-ptrace64 monitor
+  *(pre)load system.prop (same as resetprop -n)
+  *remount modules /system
+  *execute general scripts in post-mount.d/
+  *execute module scripts post-mount.sh
+zygote-start
+load_all_props_action
+  *execute resetprop (actual set props for resetprop with -n option)
+... -> boot
+  class_start core
+    start-service logd, console, vold, etc.
+  class_start main
+    start-service adb, netd (iptables), zygote, etc.
+
+2. kernel2user init (rom animation on screen, start by service bootanim)
+*execute general scripts in service.d/
+*execute module scripts service.sh
+*set props for resetprop without -p option
+  **(Zygisk) hook zygote (start zygiskd)
+  **(Zygisk) mount zygisksu/module.prop
+start system apps (autostart)
+...
+boot complete (broadcast ACTION_BOOT_COMPLETED event)
+*execute general scripts in boot-completed.d/
+*execute module scripts boot-completed.sh
+
+3. User operable (lock screen)
+input password to decrypt /data/data
+*actual set props for resetprop with -p option
+start user apps (autostart)
+```
+
+如果你对 Android 的 init 语言感兴趣，推荐阅读[文档](https://android.googlesource.com/platform/system/core/+/master/init/README.md)。

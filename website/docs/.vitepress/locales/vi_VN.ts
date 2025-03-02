@@ -23,7 +23,7 @@ export default defineConfig({
 
     footer: {
         message: 'Phát hành dưới giấy phép GPL3.',
-        copyright: 'Bản Quyền © 2022-nay KernelSU Developers'
+        copyright: 'Bản Quyền © 2022-nay KernelSU developers.'
     },
 
     editLink: {
@@ -36,7 +36,6 @@ export default defineConfig({
 function nav() {
   return [
     { text: 'Hướng Dẫn', link: '/vi_VN/guide/what-is-kernelsu' },
-    { text: 'Github', link: 'https://github.com/tiann/KernelSU' }
   ]
 }
 
